@@ -11,12 +11,5 @@ services:
       - key: PORT
         value: 4000
       - key: CORS_ORIGIN
-        # Замените на реальный адрес GitHub Pages после первого деплоя фронтенда,
-        # например: https://<username>.github.io
         value: https://<username>.github.io
-      - key: DB_PATH
-        value: /data/room-assets.db
-    disk:
-      name: room-assets-data
-      mountPath: /data
-      sizeGB: 1
+      # DB_PATH больше не нужен — база будет создана рядом с приложением
