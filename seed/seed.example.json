@@ -1,0 +1,20 @@
+{
+  "rooms": [
+    {"id":"r-101","name":"Аудитория 101","capacity":30,"features":["projector","whiteboard"]},
+    {"id":"r-203","name":"Аудитория 203","capacity":20,"features":[]}
+  ],
+  "assets": [
+    {"id":"a-proj-1","name":"Проектор Epson","inventoryCode":"PRJ001","status":"available"}
+  ],
+  "bookings": [
+    {
+      "id":"b-1",
+      "resourceType":"room",
+      "resourceId":"r-101",
+      "title":"Семинар",
+      "start":"2025-09-05T08:00:00Z",
+      "end":"2025-09-05T09:30:00Z",
+      "notes":"Нужен HDMI"
+    }
+  ]
+}

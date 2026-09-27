@@ -1,0 +1,16 @@
+# backend
+backend/node_modules
+backend/dist
+backend/data/*.db
+backend/data/*.db-*
+backend/.env
+
+# сборочный артефакт для сдачи
+release/
+
+# общее
+*.log
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
