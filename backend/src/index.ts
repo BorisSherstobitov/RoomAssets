@@ -18,13 +18,13 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/rooms", roomsRouter);
 app.use("/api/assets", assetsRouter);
 app.use("/api/bookings", bookingsRouter);
 
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({ error: "NOT_FOUND" });
 });
 

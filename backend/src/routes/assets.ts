@@ -3,7 +3,7 @@ import { listAssets } from "../data/assets.repo.js";
 
 export const assetsRouter = Router();
 
-assetsRouter.get("/", (req, res) => {
+assetsRouter.get("/", (_req, res) => {
   const items = listAssets();
   res.json({ items, page: 1, total: items.length });
 });
