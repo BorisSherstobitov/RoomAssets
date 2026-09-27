@@ -8,16 +8,37 @@ import { findOverlappingBookings } from "../utils/overlap.js";
 
 export const bookingsRouter = Router();
 
-const bookingInputSchema = z.object({
+// 1. Базовая объектная схема — без .superRefine, чтобы работал .partial()
+const bookingObjectSchema = z.object({
   resourceType: z.enum(["room", "asset"]),
   resourceId: z.string().min(1),
   title: z.string().min(1),
   start: z.string().datetime(), // ISO-8601 / RFC 3339
   end: z.string().datetime(),
   notes: z.string().optional(),
-}).refine((b) => new Date(b.start) < new Date(b.end), {
-  message: "start должен быть раньше end",
-  path: ["end"],
+});
+
+// 2. Схема для POST: объект + проверка, что start < end (Zod v4: superRefine принимает один аргумент — callback)
+const bookingInputSchema = bookingObjectSchema.superRefine((b, ctx) => {
+  if (new Date(b.start) >= new Date(b.end)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "start должен быть раньше end",
+      path: ["end"],
+    });
+  }
+});
+
+// 3. Схема для PUT: сначала partial (это ZodObject), потом refine
+const bookingUpdateSchema = bookingObjectSchema.partial().superRefine((b, ctx) => {
+  // Проверяем только если оба поля присутствуют в патче
+  if (b.start && b.end && new Date(b.start) >= new Date(b.end)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "start должен быть раньше end",
+      path: ["end"],
+    });
+  }
 });
 
 // GET /api/bookings?q=&date=&resourceType=&resourceId=
@@ -58,7 +79,7 @@ bookingsRouter.put("/:id", (req, res) => {
   const existing = getBooking(req.params.id);
   if (!existing) return res.status(404).json({ error: "NOT_FOUND" });
 
-  const parsed = bookingInputSchema.partial().safeParse(req.body);
+  const parsed = bookingUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "VALIDATION_ERROR", details: parsed.error.flatten() });
   }
