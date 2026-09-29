@@ -1,6 +1,9 @@
 // Модель данных — по Task_1.pdf, раздел "Модель данных"
 
+// "booked" — вычисляемый статус: выставляется автоматически, пока идёт бронь этой аудитории.
 export type RoomStatus = "available" | "booked" | "maintenance";
+// Статусы, которые можно выставить вручную
+export type RoomManualStatus = "available" | "maintenance";
 
 export interface Room {
   id: string;
@@ -11,7 +14,9 @@ export interface Room {
   status: RoomStatus;
 }
 
+// "in_use" — вычисляемый статус: выставляется автоматически, пока идёт бронь этого инвентаря.
 export type AssetStatus = "available" | "in_use" | "maintenance";
+export type AssetManualStatus = "available" | "maintenance";
 
 export interface Asset {
   id: string;

@@ -2,9 +2,9 @@
 
 ## Ссылки
 
-- GitHub-репозиторий: [TODO]
-- Frontend (GitHub Pages): [TODO]
-- Backend (Render): [TODO]
+- GitHub-репозиторий: https://github.com/BorisSherstobitov/RoomAssets
+- Frontend (GitHub Pages): https://borissherstobitov.github.io/RoomAssets/
+- Backend (Render): https://room-assets-api-hw0t.onrender.com/api
 
 ## Frontend
 
@@ -25,7 +25,6 @@
 
 ## CI/CD своими словами
 
-[TODO, но опорные тезисы:]
 - При каждом пуше в `main` GitHub Actions (`frontend-deploy.yml`) собирает статическую сборку
   фронтенда (`npm run build`) и публикует её на GitHub Pages.
 - Backend деплоится на Render автоматически при пуше в подключённую ветку (или через deploy hook

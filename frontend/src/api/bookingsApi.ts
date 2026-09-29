@@ -20,7 +20,9 @@ export interface BookingsResponseDto {
 
 export interface BookingFilters {
   q?: string;           // поиск по названию/примечанию
-  date?: string;         // YYYY-MM-DD
+  date?: string;         // YYYY-MM-DD (сутки по UTC; для локальных суток используйте from/to)
+  from?: string;         // ISO: брони, пересекающие период [from, to)
+  to?: string;           // ISO, не включительно
   resourceType?: ResourceType;
   resourceId?: string;
   page?: number;

@@ -1,9 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, TextField, MenuItem, Stack, Alert } from "@mui/material";
 import { Button } from "@/components/Button";
 import type { BookingDto, ResourceType } from "@/api/bookingsApi";
+import { fetchRooms } from "@/api/roomsApi";
+import { fetchAssets } from "@/api/assetsApi";
 import { localInputValueToIso, isoToLocalInputValue } from "@/utils/date";
 import { findOverlappingBookings } from "@/utils/overlap";
+
+interface ResourceOption {
+  value: string;
+  label: string;
+}
 
 export interface BookingFormProps {
   initial?: BookingDto;
@@ -24,6 +31,39 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [start, setStart] = useState(initial ? isoToLocalInputValue(initial.start) : "");
   const [end, setEnd] = useState(initial ? isoToLocalInputValue(initial.end) : "");
+
+  // Списки аудиторий и инвентаря для выпадающего списка ресурсов
+  const [rooms, setRooms] = useState<ResourceOption[]>([]);
+  const [assets, setAssets] = useState<ResourceOption[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(true);
+  const [resourcesError, setResourcesError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [r, a] = await Promise.all([fetchRooms(1), fetchAssets(1)]);
+        if (cancelled) return;
+        setRooms(r.items.map((x) => ({ value: x.id, label: `${x.code} — ${x.name}` })));
+        setAssets(a.items.map((x) => ({ value: x.id, label: `${x.inventoryCode} — ${x.name}` })));
+      } catch {
+        if (!cancelled) setResourcesError(true);
+      } finally {
+        if (!cancelled) setResourcesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const resourceOptions = useMemo(() => {
+    const base = [...(resourceType === "room" ? rooms : assets)];
+    // Ресурс из существующей брони может отсутствовать в каталоге (удалён / из импорта) —
+    // добавляем его в список, чтобы значение не терялось при редактировании.
+    if (resourceId && !base.some((o) => o.value === resourceId)) {
+      base.unshift({ value: resourceId, label: resourcesLoading ? resourceId : `${resourceId} (нет в каталоге)` });
+    }
+    return base;
+  }, [resourceType, rooms, assets, resourceId, resourcesLoading]);
 
   const conflicts = useMemo(() => {
     if (!start || !end || !resourceId) return [];
@@ -58,19 +98,40 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ display: "grid", gap: 2, maxWidth: 480 }}>
-      <TextField select label="Тип ресурса" value={resourceType} onChange={(e) => setResourceType(e.target.value as ResourceType)}>
+      <TextField
+        select
+        label="Тип ресурса"
+        value={resourceType}
+        onChange={(e) => {
+          setResourceType(e.target.value as ResourceType);
+          setResourceId(""); // ресурс другого типа — выбор нужно сделать заново
+        }}
+      >
         {RESOURCE_OPTIONS.map((o) => (
           <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
         ))}
       </TextField>
 
       <TextField
-        label="ID ресурса"
+        select
+        label={resourceType === "room" ? "Аудитория" : "Инвентарь"}
         value={resourceId}
         onChange={(e) => setResourceId(e.target.value)}
-        helperText="Например: r-101 (аудитория) или a-proj-1 (инвентарь)"
+        disabled={resourcesLoading}
+        error={resourcesError}
+        helperText={
+          resourcesError
+            ? "Не удалось загрузить список ресурсов"
+            : !resourcesLoading && resourceOptions.length === 0
+              ? "В каталоге пока нет ресурсов этого типа"
+              : undefined
+        }
         required
-      />
+      >
+        {resourceOptions.map((o) => (
+          <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+        ))}
+      </TextField>
 
       <TextField label="Название брони" value={title} onChange={(e) => setTitle(e.target.value)} required />
 

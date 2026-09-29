@@ -41,12 +41,15 @@ const bookingUpdateSchema = bookingObjectSchema.partial().superRefine((b, ctx) =
   }
 });
 
-// GET /api/bookings?q=&date=&resourceType=&resourceId=
+// GET /api/bookings?q=&from=&to=&date=&resourceType=&resourceId=
+// from/to (ISO) — период; возвращаются брони, пересекающиеся с ним. date (YYYY-MM-DD) — сутки по UTC.
 bookingsRouter.get("/", (req, res) => {
-  const { q, date, resourceType, resourceId } = req.query;
+  const { q, date, from, to, resourceType, resourceId } = req.query;
   const items = listBookings({
     q: typeof q === "string" ? q : undefined,
     date: typeof date === "string" ? date : undefined,
+    from: typeof from === "string" ? from : undefined,
+    to: typeof to === "string" ? to : undefined,
     resourceType: resourceType === "room" || resourceType === "asset" ? resourceType : undefined,
     resourceId: typeof resourceId === "string" ? resourceId : undefined,
   });

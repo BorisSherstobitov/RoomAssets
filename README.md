@@ -3,8 +3,8 @@
 Приложение для управления бронированием аудиторий и инвентаря.
 Frontend: Vite + React + TypeScript + MUI. Backend: Node.js + Express + TypeScript.
 
-- **Демо (frontend, GitHub Pages):** [TODO: ссылка]
-- **API (backend, Render):** [TODO: ссылка]
+- **Демо (frontend, GitHub Pages):** https://borissherstobitov.github.io/RoomAssets/
+- **API (backend, Render):** https://room-assets-api-hw0t.onrender.com/api
 
 ## Структура репозитория
 
@@ -84,4 +84,3 @@ just release         # скопирует frontend/dist в release/
 - [`docs/DATA.md`](docs/DATA.md) — модель данных и API-контракт
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — выбор стека
 - [`docs/TESTS.md`](docs/TESTS.md) — ручные сценарии проверки
-- [`docs/COMPAT.md`](docs/COMPAT.md) — совместимость Windows/Linux

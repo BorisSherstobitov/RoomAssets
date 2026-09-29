@@ -4,6 +4,10 @@ import {
   type BookingDto, type BookingFilters, type CreateBookingInput,
 } from "@/api/bookingsApi";
 
+// Номер последнего запроса: ответ устаревшего (более медленного) запроса не должен
+// перезаписывать результат более свежего — иначе при быстром вводе в поиск список "прыгает".
+let loadSeq = 0;
+
 interface BookingsState {
   items: BookingDto[];
   loading: boolean;
@@ -21,11 +25,14 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
   error: null,
 
   load: async (filters) => {
+    const seq = ++loadSeq;
     set({ loading: true, error: null });
     try {
       const res = await fetchBookings(filters);
+      if (seq !== loadSeq) return;
       set({ items: res.items, loading: false });
     } catch (e) {
+      if (seq !== loadSeq) return;
       set({ error: (e as Error).message, loading: false });
     }
   },

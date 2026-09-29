@@ -9,7 +9,7 @@ import { BookingForm } from "@/components/BookingForm";
 import { useBookingsStore } from "@/store/bookings.store";
 import { fetchRooms } from "@/api/roomsApi";
 import { fetchAssets } from "@/api/assetsApi";
-import { formatLocal } from "@/utils/date";
+import { formatLocal, localDayRangeIso } from "@/utils/date";
 import type { BookingDto, ResourceType } from "@/api/bookingsApi";
 
 /**
@@ -22,7 +22,10 @@ export function BookingsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [date, setDate] = useState("");
+  // id ресурса -> человекочитаемое название (для колонки "Ресурс")
+  const [resourceNames, setResourceNames] = useState<Record<string, string>>({});
   const [resourceType, setResourceType] = useState<ResourceType | "">("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -30,10 +33,47 @@ export function BookingsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Небольшая задержка, чтобы не слать запрос на каждую букву
   useEffect(() => {
-    load({ q: q || undefined, date: date || undefined, resourceType: resourceType || undefined });
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    // Фильтр даты — это локальные сутки пользователя [00:00; 24:00). Backend вернёт все брони,
+    // которые ПЕРЕСЕКАЮТ этот период (в т.ч. начавшиеся раньше или закончившиеся позже).
+    const range = date ? localDayRangeIso(date) : null;
+    load({
+      q: debouncedQ || undefined,
+      from: range?.from,
+      to: range?.to,
+      resourceType: resourceType || undefined,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, date, resourceType]);
+  }, [debouncedQ, date, resourceType]);
+
+  // Названия аудиторий/инвентаря для колонки "Ресурс"
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [r, a] = await Promise.all([fetchRooms(1), fetchAssets(1)]);
+        if (cancelled) return;
+        const names: Record<string, string> = {};
+        for (const x of r.items) names[`room:${x.id}`] = `Аудитория ${x.code} — ${x.name}`;
+        for (const x of a.items) names[`asset:${x.id}`] = `Инвентарь ${x.inventoryCode} — ${x.name}`;
+        setResourceNames(names);
+      } catch {
+        // без названий просто показываем id, как раньше
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  function resourceLabel(b: BookingDto): string {
+    return resourceNames[`${b.resourceType}:${b.resourceId}`]
+      ?? (b.resourceType === "room" ? `Аудитория ${b.resourceId}` : `Инвентарь ${b.resourceId}`);
+  }
 
   function openCreate() {
     setEditing(undefined);
@@ -135,7 +175,7 @@ export function BookingsPage() {
               <TableRow key={b.id} hover>
                 <TableCell>{b.title}</TableCell>
                 <TableCell>
-                  <Chip size="small" label={b.resourceType === "room" ? `Аудитория ${b.resourceId}` : `Инвентарь ${b.resourceId}`} />
+                  <Chip size="small" label={resourceLabel(b)} />
                 </TableCell>
                 <TableCell>{formatLocal(b.start)}</TableCell>
                 <TableCell>{formatLocal(b.end)}</TableCell>
