@@ -95,6 +95,31 @@ export function deleteAssetWithBookings(id: string): void {
   })();
 }
 
+/**
+ * Полная замена таблицы инвентаря данными из файла (одна транзакция).
+ * Оборудование, которого нет в файле, удаляется ВМЕСТЕ со своими бронями, чтобы не оставалось
+ * броней на несуществующие ресурсы. Остальное — создаётся или обновляется по id.
+ */
+export function replaceAllAssets(items: AssetCreateData[]): { imported: number; removed: number } {
+  return db.transaction(() => {
+    const keep = new Set(items.map((i) => i.id));
+    const existing = db.prepare("SELECT id FROM assets").all() as { id: string }[];
+    let removed = 0;
+    for (const a of existing) {
+      if (keep.has(a.id)) continue;
+      deleteBookingsByResource("asset", a.id);
+      db.prepare("DELETE FROM assets WHERE id = ?").run(a.id);
+      removed++;
+    }
+    const upsert = db.prepare(
+      `INSERT INTO assets (id, name, inventoryCode, status) VALUES (@id, @name, @inventoryCode, @status)
+       ON CONFLICT(id) DO UPDATE SET name=@name, inventoryCode=@inventoryCode, status=@status`
+    );
+    for (const i of items) upsert.run(i);
+    return { imported: items.length, removed };
+  })();
+}
+
 export function upsertAsset(asset: Asset): void {
   db.prepare(
     `INSERT INTO assets (id, name, inventoryCode, status) VALUES (@id, @name, @inventoryCode, @status)

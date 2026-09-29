@@ -103,6 +103,32 @@ export function deleteRoomWithBookings(id: string): void {
   })();
 }
 
+/**
+ * Полная замена таблицы аудиторий данными из файла (одна транзакция).
+ * Аудитории, которых нет в файле, удаляются ВМЕСТЕ со своими бронями, чтобы не оставалось
+ * броней на несуществующие ресурсы. Остальные — создаются или обновляются по id.
+ */
+export function replaceAllRooms(items: RoomCreateData[]): { imported: number; removed: number } {
+  return db.transaction(() => {
+    const keep = new Set(items.map((i) => i.id));
+    const existing = db.prepare("SELECT id FROM rooms").all() as { id: string }[];
+    let removed = 0;
+    for (const r of existing) {
+      if (keep.has(r.id)) continue;
+      deleteBookingsByResource("room", r.id);
+      db.prepare("DELETE FROM rooms WHERE id = ?").run(r.id);
+      removed++;
+    }
+    const upsert = db.prepare(
+      `INSERT INTO rooms (id, code, name, capacity, equipment, status)
+       VALUES (@id, @code, @name, @capacity, @equipment, @status)
+       ON CONFLICT(id) DO UPDATE SET code=@code, name=@name, capacity=@capacity, equipment=@equipment, status=@status`
+    );
+    for (const i of items) upsert.run({ ...i, equipment: JSON.stringify(i.equipment) });
+    return { imported: items.length, removed };
+  })();
+}
+
 export function upsertRoom(room: Room): void {
   db.prepare(
     `INSERT INTO rooms (id, code, name, capacity, equipment, status) VALUES (@id, @code, @name, @capacity, @equipment, @status)

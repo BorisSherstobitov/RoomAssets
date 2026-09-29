@@ -23,6 +23,14 @@ export interface AssetInput {
   status: AssetManualStatus;
 }
 
+/** Запись оборудования в файле импорта (id необязателен, статус приводится backend-ом) */
+export interface AssetImportItem {
+  id?: string;
+  inventoryCode: string;
+  name: string;
+  status?: string;
+}
+
 export async function fetchAssets(page = 1): Promise<AssetsResponseDto> {
   const { data } = await http.get<AssetsResponseDto>("/assets", { params: { page } });
   return data;
@@ -41,4 +49,10 @@ export async function updateAsset(id: string, input: Partial<AssetInput>): Promi
 /** force=true — удалить оборудование вместе с его бронями */
 export async function deleteAsset(id: string, force = false): Promise<void> {
   await http.delete(`/assets/${encodeURIComponent(id)}`, { params: force ? { force: "true" } : undefined });
+}
+
+/** Полная замена таблицы инвентаря данными из файла. Отсутствующее в файле оборудование удаляется вместе с бронями */
+export async function importAssets(assets: AssetImportItem[]): Promise<{ imported: number; removed: number }> {
+  const { data } = await http.post<{ imported: number; removed: number }>("/assets/import", { assets });
+  return data;
 }

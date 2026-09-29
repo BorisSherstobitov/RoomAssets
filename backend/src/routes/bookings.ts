@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
+import { getRoom } from "../data/rooms.repo.js";
+import { getAsset } from "../data/assets.repo.js";
 import {
   listBookings, getBooking, insertBooking, updateBookingById, deleteBookingById, replaceAllBookings,
 } from "../data/bookings.repo.js";
@@ -41,6 +43,17 @@ const bookingUpdateSchema = bookingObjectSchema.partial().superRefine((b, ctx) =
   }
 });
 
+/** Ресурс существует в каталоге и сейчас "На обслуживании" — бронировать его нельзя */
+function isInMaintenance(resourceType: "room" | "asset", resourceId: string): boolean {
+  const resource = resourceType === "room" ? getRoom(resourceId) : getAsset(resourceId);
+  return resource?.status === "maintenance";
+}
+
+const MAINTENANCE_RESPONSE = {
+  error: "RESOURCE_UNDER_MAINTENANCE",
+  message: "Ресурс находится на обслуживании — забронировать его нельзя",
+};
+
 // GET /api/bookings?q=&from=&to=&date=&resourceType=&resourceId=
 // from/to (ISO) — период; возвращаются брони, пересекающиеся с ним. date (YYYY-MM-DD) — сутки по UTC.
 bookingsRouter.get("/", (req, res) => {
@@ -62,7 +75,10 @@ bookingsRouter.post("/", (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "VALIDATION_ERROR", details: parsed.error.flatten() });
   }
-
+  if (isInMaintenance(parsed.data.resourceType, parsed.data.resourceId)) {
+    return res.status(409).json(MAINTENANCE_RESPONSE);
+  }
+  
   const conflicts = findOverlappingBookings(listBookings(), parsed.data);
   if (conflicts.length > 0) {
     return res.status(409).json({
@@ -88,6 +104,18 @@ bookingsRouter.put("/:id", (req, res) => {
   }
 
   const candidate = { ...existing, ...parsed.data };
+  
+  // Менять ресурс/время можно только на доступный ресурс. Правка названия или примечания
+  // у брони, ресурс которой позже отправили на обслуживание, остаётся возможной.
+  const slotChanged =
+    candidate.resourceType !== existing.resourceType ||
+    candidate.resourceId !== existing.resourceId ||
+    Date.parse(candidate.start) !== Date.parse(existing.start) ||
+    Date.parse(candidate.end) !== Date.parse(existing.end);
+  if (slotChanged && isInMaintenance(candidate.resourceType, candidate.resourceId)) {
+    return res.status(409).json(MAINTENANCE_RESPONSE);
+  }
+  
   const conflicts = findOverlappingBookings(listBookings(), candidate, existing.id);
   if (conflicts.length > 0) {
     return res.status(409).json({

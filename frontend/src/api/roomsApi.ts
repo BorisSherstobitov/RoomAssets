@@ -27,6 +27,16 @@ export interface RoomInput {
   status: RoomManualStatus;
 }
 
+/** Запись аудитории в файле импорта (id необязателен, статус приводится backend-ом) */
+export interface RoomImportItem {
+  id?: string;
+  code: string;
+  name: string;
+  capacity: number;
+  equipment?: string[];
+  status?: string;
+}
+
 export async function fetchRooms(page = 1): Promise<RoomsResponseDto> {
   const { data } = await http.get<RoomsResponseDto>("/rooms", { params: { page } });
   return data;
@@ -45,4 +55,10 @@ export async function updateRoom(id: string, input: Partial<RoomInput>): Promise
 /** force=true — удалить аудиторию вместе с её бронями */
 export async function deleteRoom(id: string, force = false): Promise<void> {
   await http.delete(`/rooms/${encodeURIComponent(id)}`, { params: force ? { force: "true" } : undefined });
+}
+
+/** Полная замена таблицы аудиторий данными из файла. Отсутствующие в файле аудитории удаляются вместе с бронями */
+export async function importRooms(rooms: RoomImportItem[]): Promise<{ imported: number; removed: number }> {
+  const { data } = await http.post<{ imported: number; removed: number }>("/rooms/import", { rooms });
+  return data;
 }

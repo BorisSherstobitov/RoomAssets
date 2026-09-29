@@ -3,6 +3,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import {
   listAssets, getAsset, insertAsset, updateAsset, deleteAssetWithBookings, assetIdExists, inventoryCodeTaken,
+  replaceAllAssets,
 } from "../data/assets.repo.js";
 import { countBookingsByResource } from "../data/bookings.repo.js";
 
@@ -91,4 +92,59 @@ assetsRouter.delete("/:id", (req, res) => {
 
   deleteAssetWithBookings(existing.id);
   res.status(204).send();
+});
+
+// POST /api/assets/import — полная замена таблицы инвентаря (используется фронтом при импорте JSON).
+// Тело: { "assets": [ { id?, inventoryCode, name, status? }, ... ] }.
+// Статус приводится к ручному: "maintenance" остаётся, всё остальное (в т.ч. "in_use") -> "available".
+// Оборудование, которого нет в файле, удаляется вместе со своими бронями.
+const assetImportItem = z.object({
+  id: z.string().trim().min(1).max(100).optional(),
+  inventoryCode: assetFields.shape.inventoryCode,
+  name: assetFields.shape.name,
+  status: z.string().optional(),
+});
+const assetImportSchema = z.array(assetImportItem).max(5000);
+
+assetsRouter.post("/import", (req, res) => {
+  const parsed = assetImportSchema.safeParse(req.body?.assets);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const idx = typeof issue?.path[0] === "number" ? `Запись №${issue.path[0] + 1}: ` : "";
+    return res.status(400).json({
+      error: "VALIDATION_ERROR",
+      message: issue ? `${idx}${issue.message}` : "Ожидается массив assets",
+      details: parsed.error.flatten(),
+    });
+  }
+
+  const usedIds = new Set<string>();
+  const usedCodes = new Set<string>();
+  const items = [];
+  for (const a of parsed.data) {
+    if (usedCodes.has(a.inventoryCode)) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: `В файле повторяется инв. номер «${a.inventoryCode}»` });
+    }
+    usedCodes.add(a.inventoryCode);
+
+    let id = a.id;
+    if (!id) {
+      id = `a-${nanoid(8)}`;
+      while (usedIds.has(id)) id = `a-${nanoid(8)}`;
+    }
+    if (usedIds.has(id)) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: `В файле повторяется id «${id}»` });
+    }
+    usedIds.add(id);
+
+    items.push({
+      id,
+      inventoryCode: a.inventoryCode,
+      name: a.name,
+      status: a.status === "maintenance" ? ("maintenance" as const) : ("available" as const),
+    });
+  }
+
+  const result = replaceAllAssets(items);
+  res.json(result);
 });

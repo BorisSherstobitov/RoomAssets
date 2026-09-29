@@ -3,6 +3,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import {
   listRooms, getRoom, insertRoom, updateRoom, deleteRoomWithBookings, roomIdExists, roomCodeTaken,
+  replaceAllRooms,
 } from "../data/rooms.repo.js";
 import { countBookingsByResource } from "../data/bookings.repo.js";
 
@@ -90,4 +91,60 @@ roomsRouter.delete("/:id", (req, res) => {
 
   deleteRoomWithBookings(existing.id);
   res.status(204).send();
+});
+
+// POST /api/rooms/import — полная замена таблицы аудиторий (используется фронтом при импорте JSON).
+// Тело: { "rooms": [ { id?, code, name, capacity, equipment?, status? }, ... ] }.
+// Статус приводится к ручному: "maintenance" остаётся, всё остальное (в т.ч. "booked") -> "available".
+// Аудитории, которых нет в файле, удаляются вместе со своими бронями.
+const roomImportItem = z.object({
+  id: z.string().trim().min(1).max(100).optional(),
+  code: roomFields.shape.code,
+  name: roomFields.shape.name,
+  capacity: roomFields.shape.capacity,
+  equipment: roomFields.shape.equipment.default([]),
+  status: z.string().optional(),
+});
+const roomImportSchema = z.array(roomImportItem).max(5000);
+
+roomsRouter.post("/import", (req, res) => {
+  const parsed = roomImportSchema.safeParse(req.body?.rooms);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const idx = typeof issue?.path[0] === "number" ? `Запись №${issue.path[0] + 1}: ` : "";
+    return res.status(400).json({
+      error: "VALIDATION_ERROR",
+      message: issue ? `${idx}${issue.message}` : "Ожидается массив rooms",
+      details: parsed.error.flatten(),
+    });
+  }
+
+  const usedIds = new Set<string>();
+  const usedCodes = new Set<string>();
+  const items = [];
+  for (const r of parsed.data) {
+    if (usedCodes.has(r.code)) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: `В файле повторяется номер аудитории «${r.code}»` });
+    }
+    usedCodes.add(r.code);
+
+    let id = r.id;
+    if (!id) id = /^[\w-]+$/.test(r.code) && !usedIds.has(r.code) ? r.code : nanoid(10);
+    if (usedIds.has(id)) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: `В файле повторяется id «${id}»` });
+    }
+    usedIds.add(id);
+
+    items.push({
+      id,
+      code: r.code,
+      name: r.name,
+      capacity: r.capacity,
+      equipment: r.equipment,
+      status: r.status === "maintenance" ? ("maintenance" as const) : ("available" as const),
+    });
+  }
+
+  const result = replaceAllRooms(items);
+  res.json(result);
 });

@@ -35,6 +35,7 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
   // Списки аудиторий и инвентаря для выпадающего списка ресурсов
   const [rooms, setRooms] = useState<ResourceOption[]>([]);
   const [assets, setAssets] = useState<ResourceOption[]>([]);
+  const [blocked, setBlocked] = useState<Record<string, string>>({});
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [resourcesError, setResourcesError] = useState(false);
 
@@ -44,8 +45,14 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
       try {
         const [r, a] = await Promise.all([fetchRooms(1), fetchAssets(1)]);
         if (cancelled) return;
-        setRooms(r.items.map((x) => ({ value: x.id, label: `${x.code} — ${x.name}` })));
-        setAssets(a.items.map((x) => ({ value: x.id, label: `${x.inventoryCode} — ${x.name}` })));
+        const roomOpts = r.items.map((x) => ({ value: x.id, label: `${x.code} — ${x.name}`, maintenance: x.status === "maintenance" }));
+        const assetOpts = a.items.map((x) => ({ value: x.id, label: `${x.inventoryCode} — ${x.name}`, maintenance: x.status === "maintenance" }));
+        setRooms(roomOpts.filter((o) => !o.maintenance));
+        setAssets(assetOpts.filter((o) => !o.maintenance));
+        const blockedMap: Record<string, string> = {};
+        for (const o of roomOpts) if (o.maintenance) blockedMap[`room:${o.value}`] = o.label;
+        for (const o of assetOpts) if (o.maintenance) blockedMap[`asset:${o.value}`] = o.label;
+        setBlocked(blockedMap);
       } catch {
         if (!cancelled) setResourcesError(true);
       } finally {
@@ -59,11 +66,20 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
     const base = [...(resourceType === "room" ? rooms : assets)];
     // Ресурс из существующей брони может отсутствовать в каталоге (удалён / из импорта) —
     // добавляем его в список, чтобы значение не терялось при редактировании.
+    // Ресурс из существующей брони может отсутствовать в списке (удалён / из импорта / позже
+    // отправлен на обслуживание) — добавляем его, чтобы значение не терялось при редактировании.
+    // Выбрать такой ресурс заново нельзя: после смены значения он из списка исчезает.
     if (resourceId && !base.some((o) => o.value === resourceId)) {
-      base.unshift({ value: resourceId, label: resourcesLoading ? resourceId : `${resourceId} (нет в каталоге)` });
+      const blockedLabel = blocked[`${resourceType}:${resourceId}`];
+      base.unshift({
+        value: resourceId,
+        label: blockedLabel
+          ? `${blockedLabel} (на обслуживании)`
+          : resourcesLoading ? resourceId : `${resourceId} (нет в каталоге)`,
+      });
     }
     return base;
-  }, [resourceType, rooms, assets, resourceId, resourcesLoading]);
+  }, [resourceType, rooms, assets, blocked, resourceId, resourcesLoading]);
 
   const conflicts = useMemo(() => {
     if (!start || !end || !resourceId) return [];
@@ -123,7 +139,7 @@ export function BookingForm({ initial, existingBookings, onSubmit, onCancel }: B
           resourcesError
             ? "Не удалось загрузить список ресурсов"
             : !resourcesLoading && resourceOptions.length === 0
-              ? "В каталоге пока нет ресурсов этого типа"
+              ? "Нет доступных ресурсов этого типа (все на обслуживании или каталог пуст)"
               : undefined
         }
         required
